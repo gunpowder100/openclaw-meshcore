@@ -1,0 +1,79 @@
+# ============================================================================
+# OpenClaw MeshCore Configuration
+# AI-powered LoRa mesh gateway
+# ============================================================================
+
+meshcore:
+  # Serial port for WIO Pro P1 Tracker (use "auto" for auto-detection)
+  port: "auto"
+  baud: 115200
+  debug: false
+
+ai:
+  # ── Local AI (Ollama / Gemma 4) ──
+  # Running on same Debian server (.73), so use localhost
+  ollama_url: "http://127.0.0.1:11434"
+  ollama_model: "gemma3:4b"
+
+  # ── Remote AI (Anthropic Claude Sonnet) ──
+  # Set API key here or via ANTHROPIC_API_KEY environment variable
+  anthropic_api_key: ""
+  anthropic_model: "claude-sonnet-4-20250514"
+
+  # Auto-detect: tries remote first, falls back to local.
+  # Set true to prefer local Gemma even when remote is available.
+  prefer_local: false
+
+  # Response timeout in seconds
+  timeout: 30
+
+  # Custom system prompt (leave empty for built-in mesh-optimized prompt)
+  system_prompt: ""
+
+  # Enable IoT/GPIO control via natural language
+  enable_iot: true
+
+iot:
+  enabled: true
+  # Debian server has no GPIO pins — dry_run logs actions without hardware control.
+  # Set false if you attach a USB relay board with GPIO support.
+  dry_run: true
+  # Custom GPIO pin mapping (leave empty for defaults)
+  # pin_map:
+  #   lights: 4
+  #   relay1: 17
+  #   fan: 24
+  #   pump: 25
+
+access:
+  # DM policy: "open" (accept all) or "allowlist" (only listed nodes)
+  dm_policy: "open"
+
+  # Node IDs allowed when dm_policy is "allowlist"
+  # allowlist:
+  #   - "a3"
+  #   - "b7"
+
+  # Always-blocked node IDs
+  blocked: []
+
+  # Require messages to start with this prefix to trigger AI
+  # Leave empty to respond to all messages
+  # Example: "\!ai " means only messages like "\!ai what's the weather?" get processed
+  require_prefix: ""
+
+privacy:
+  # Keine Nachrichten oder Mesh-Daten auf Festplatte speichern
+  # Konversationshistorie nur im RAM (für Kontext), wird bei Neustart gelöscht
+  store_messages: false
+
+  # Nachrichteninhalt im Log unterdrücken (auch im Debug-Modus)
+  # true = Nur "[RX DM] NodeName: <redacted>" statt den vollen Text
+  redact_logs: true
+
+  # Konversationshistorie komplett deaktivieren (jede Nachricht ohne Kontext)
+  # Spart RAM und verhindert, dass alte Nachrichten im Speicher bleiben
+  disable_context: false
+
+  # Automatisch Kontext nach X Minuten Inaktivität löschen (0 = nie)
+  context_timeout_minutes: 10
