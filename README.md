@@ -19,6 +19,13 @@ Send a text message from any MeshCore LoRa node → the gateway processes it thr
 - **Privacy First** — No messages stored on disk. Log redaction enabled by default. Conversation context lives in RAM only, auto-purged after configurable timeout.
 - **Access Control** — Open or allowlist-based DM policy, blocklist, optional message prefix gating.
 - **Compact & Reliable** — Failover depends only on the API key. No cron jobs, no complex setup.
+- **Duales KI-System** — Claude Sonnet (online, über Anthropic API) + Gemma 4 (lokal, über Ollama). Automatischer Wechsel zwischen Online- und Offline-KI — ohne Unterbrechung, ohne manuelle Umschaltung.
+- **Offline-KI-Chat** — Fragen über LoRa-Funk, auch ohne Netzabdeckung. Gefahrstoffidentifikation, Erstversorgungsmaßnahmen, Wetterlage, technische Datenblätter — ideal für Tunneleinsätze, Katastrophenschutz und abgelegene Lagen.
+- **Gerätesteuerung per Textnachricht** — Befehle wie „Basislagerbeleuchtung einschalten" werden automatisch in GPIO-Schaltbefehle übersetzt. Keine technischen Kenntnisse erforderlich.
+- **Automatische Nachrichtenteilung** — KI-Antworten werden in 133-Zeichen-Blöcke aufgeteilt (MeshCore-Limit) mit Nummerierung `[1/3]`, `[2/3]`, `[3/3]`.
+- **Datenschutz** — Keine Speicherung auf dem Datenträger. Protokoll-Anonymisierung standardmäßig aktiv. Gesprächskontext nur im Arbeitsspeicher, automatische Löschung nach konfigurierbarer Zeit.
+- **Zugangskontrolle** — Offener oder listenbasierter Direktnachrichtenzugang, Sperrliste, optionale Präfix-Prüfung.
+- **Kompakt & ausfallsicher** — Failover benötigt nur den API-Schlüssel. Keine Hintergrunddienste, keine komplexe Einrichtung.
 
 ## Architecture
 
