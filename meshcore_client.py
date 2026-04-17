@@ -127,15 +127,12 @@ class MeshCoreClient:
             ok = await self._mc.ensure_contacts()
             if ok:
                 contacts = self._mc.contacts or {}
-                # Index contacts by pubkey_prefix (first 12 hex chars / 6 bytes)
                 self._contacts_cache = {}
                 for key, contact in contacts.items():
                     pk = contact.get("public_key", key)
-                    prefix = pk[:12]  # 6-byte prefix as hex
+                    prefix = pk[:12]
                     self._contacts_cache[prefix] = contact
-                    # Also index by full key
                     self._contacts_cache[pk] = contact
-                    # And by name for convenience
                     name = contact.get("adv_name", "")
                     if name:
                         self._contacts_cache[f"name:{name}"] = contact
@@ -155,7 +152,6 @@ class MeshCoreClient:
         if contact:
             name = contact.get("adv_name", "") or pubkey_prefix[:4]
             return contact, name
-        # Try matching shorter prefix
         for key, c in self._contacts_cache.items():
             if key.startswith(pubkey_prefix) or pubkey_prefix.startswith(key[:12]):
                 name = c.get("adv_name", "") or pubkey_prefix[:4]
@@ -172,15 +168,12 @@ class MeshCoreClient:
         self._running = True
         logger.info("Listening for incoming MeshCore messages...")
 
-        # Subscribe to direct messages (DM)
         async def _handle_contact_msg(event):
             try:
-                payload = event.payload  # dict with pubkey_prefix, text, etc.
+                payload = event.payload
                 pubkey_prefix = payload.get("pubkey_prefix", "unknown")
                 text = payload.get("text", "")
-
                 contact, sender_name = self._resolve_sender(pubkey_prefix)
-
                 msg = MeshMessage(
                     sender_id=pubkey_prefix,
                     sender_name=sender_name,
@@ -189,30 +182,22 @@ class MeshCoreClient:
                     channel="",
                     contact=contact,
                 )
-
                 if self.redact_logs:
                     logger.info(f"[RX DM] {msg.sender_name} ({msg.sender_id}): <redacted>")
                 else:
                     logger.info(f"[RX DM] {msg.sender_name} ({msg.sender_id}): {msg.text}")
-
                 if self._on_message:
                     await self._on_message(msg)
-
             except Exception as e:
                 logger.error(f"Error handling contact message: {e}", exc_info=True)
 
-        # Subscribe to channel messages (group)
         async def _handle_channel_msg(event):
             try:
                 payload = event.payload
                 channel_idx = payload.get("channel_idx", 0)
                 text = payload.get("text", "")
-
-                # Channel messages don't always have a sender pubkey
-                # but we can still process them
                 pubkey_prefix = payload.get("pubkey_prefix", "channel")
                 contact, sender_name = self._resolve_sender(pubkey_prefix)
-
                 msg = MeshMessage(
                     sender_id=pubkey_prefix,
                     sender_name=sender_name,
@@ -221,26 +206,21 @@ class MeshCoreClient:
                     channel=str(channel_idx),
                     contact=contact,
                 )
-
                 if self.redact_logs:
                     logger.info(f"[RX CH{channel_idx}] {msg.sender_name}: <redacted>")
                 else:
                     logger.info(f"[RX CH{channel_idx}] {msg.sender_name}: {msg.text}")
-
                 if self._on_message:
                     await self._on_message(msg)
-
             except Exception as e:
                 logger.error(f"Error handling channel message: {e}", exc_info=True)
 
         self._mc.subscribe(EventType.CONTACT_MSG_RECV, _handle_contact_msg)
         self._mc.subscribe(EventType.CHANNEL_MSG_RECV, _handle_channel_msg)
 
-        # Enable automatic message fetching (polls device for waiting messages)
         await self._mc.start_auto_message_fetching()
         logger.info("Auto message fetching started.")
 
-        # Keep the event loop alive
         while self._running:
             await asyncio.sleep(0.1)
 
@@ -255,10 +235,9 @@ class MeshCoreClient:
         if not self._mc:
             raise RuntimeError("Not connected. Call connect() first.")
 
-        # contact can be a dict (with public_key) or a hex string
         dst = contact
         if isinstance(contact, dict):
-            dst = contact  # send_msg accepts dict with "public_key"
+            dst = contact
 
         chunks = chunk_message(text)
         logger.info(f"[TX] Sending {len(chunks)} chunk(s)...")
@@ -270,7 +249,6 @@ class MeshCoreClient:
                     logger.error(f"Failed to send chunk {i+1}: {result.payload}")
                     return False
                 logger.debug(f"[TX] Chunk {i+1}/{len(chunks)} sent.")
-                # Small delay between chunks to avoid flooding
                 if i < len(chunks) - 1:
                     await asyncio.sleep(1.5)
             except Exception as e:
@@ -279,19 +257,45 @@ class MeshCoreClient:
 
         return True
 
+    async def send_channel_message(self, channel_idx: int, text: str) -> bool:
+        """
+        Send a text message to a channel by its index.
+        Automatically chunks if the text exceeds 133 chars.
+        Returns True if all chunks sent successfully.
+        """
+        from meshcore.events import EventType
+
+        if not self._mc:
+            raise RuntimeError("Not connected. Call connect() first.")
+
+        chunks = chunk_message(text)
+        logger.info(f"[TX CH{channel_idx}] Sending {len(chunks)} chunk(s)...")
+
+        for i, chunk in enumerate(chunks):
+            try:
+                result = await self._mc.commands.send_channel_msg(channel_idx, chunk)
+                if result.type == EventType.ERROR:
+                    logger.error(f"Failed to send channel chunk {i+1}: {result.payload}")
+                    return False
+                logger.debug(f"[TX CH{channel_idx}] Chunk {i+1}/{len(chunks)} sent.")
+                if i < len(chunks) - 1:
+                    await asyncio.sleep(1.5)
+            except Exception as e:
+                logger.error(f"Error sending channel chunk {i+1}: {e}")
+                return False
+
+        return True
+
     async def send_to_id(self, node_id: str, text: str) -> bool:
         """Send a message to a node by its pubkey prefix hex string."""
-        # Try to find contact in cache
         contact = self._contacts_cache.get(node_id)
         if not contact:
-            # Refresh and retry
             await self._refresh_contacts()
             contact = self._contacts_cache.get(node_id)
 
         if contact:
             return await self.send_message(contact, text)
 
-        # If we still don't have a contact dict, try sending by raw pubkey hex
         logger.warning(f"Contact {node_id} not in cache, trying raw pubkey...")
         return await self.send_message(node_id, text)
 
@@ -300,7 +304,6 @@ class MeshCoreClient:
         if not self._mc:
             return {}
         try:
-            # Try to get self info
             result = await self._mc.commands.get_self()
             if hasattr(result, 'payload'):
                 return {"self": str(result.payload)}
