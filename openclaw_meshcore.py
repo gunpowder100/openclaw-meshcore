@@ -201,7 +201,10 @@ class OpenClawMeshCore:
                     iot_result = self.iot.execute_action(action)
                     reply = f"{clean_reply} [{iot_result}]" if clean_reply else iot_result
 
-            if msg.contact:
+            if msg.is_group and msg.channel:
+                # Channel message: reply back to the same channel
+                success = await self.mesh.send_channel_message(int(msg.channel), reply)
+            elif msg.contact:
                 success = await self.mesh.send_message(msg.contact, reply)
             else:
                 success = await self.mesh.send_to_id(msg.sender_id, reply)
@@ -214,8 +217,11 @@ class OpenClawMeshCore:
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)
             try:
-                if msg.contact:
-                    await self.mesh.send_message(msg.contact, f"Error: {str(e)[:100]}")
+                err_text = f"Error: {str(e)[:100]}"
+                if msg.is_group and msg.channel:
+                    await self.mesh.send_channel_message(int(msg.channel), err_text)
+                elif msg.contact:
+                    await self.mesh.send_message(msg.contact, err_text)
             except Exception:
                 pass
 
