@@ -1,8 +1,14 @@
-# OpenClaw MeshCore
+# MeshCore KI Integration
 
 **AI-powered LoRa mesh gateway** — bridges [MeshCore](https://github.com/rpsreal/MeshCore) mesh networks with AI models for off-grid intelligent communication.
 
 Send a text message from any MeshCore LoRa node → the gateway processes it through AI → you get an answer back over radio. No internet needed at the endpoint.
+
+> **Two editions available:**
+> - **Standalone** — slim Python scripts, direct Anthropic API, zero dependencies beyond an API key
+> - **OpenClaw Edition** *(planned)* — MeshCore as a channel plugin for [OpenClaw](https://openclaw.ai), the open-source AI gateway
+
+---
 
 ## Features
 
@@ -12,32 +18,58 @@ Send a text message from any MeshCore LoRa node → the gateway processes it thr
 - **Message Chunking** — AI responses are automatically split into 133-character chunks (MeshCore limit) with `[n/N]` prefixes.
 - **Privacy First** — No messages stored on disk. Log redaction enabled by default. Conversation context lives in RAM only, auto-purged after configurable timeout.
 - **Access Control** — Open or allowlist-based DM policy, blocklist, optional message prefix gating.
+- **Compact & Reliable** — Failover depends only on the API key. No cron jobs, no complex setup.
 
 ## Architecture
 
+### Standalone Edition
+
 ```
-┌─────────────────┐     LoRa 864 MHz      ┌──────────────────────┐
-│  MeshCore Node   │ ◄──────────────────► │  WIO Pro P1 Tracker  │
-│  (Handheld/App)  │    MeshCore Protocol  │  (USB Gateway Radio) │
-└─────────────────┘                        └──────────┬───────────┘
-                                              USB Serial │ 115200 Baud
-                                           ┌──────────┴───────────┐
-                                           │   Hermes Server      │
-                                           │   (Debian Linux)     │
-                                           │                      │
-                                           │  openclaw_meshcore.py│
-                                           │  meshcore_client.py  │
-                                           │  ai_backend.py       │
-                                           │  iot_handler.py      │
-                                           └───┬──────────┬───────┘
-                                               │          │
-                                   ┌───────────┘          └───────────┐
-                                   ▼                                  ▼
-                          ┌─────────────────┐              ┌─────────────────┐
-                          │  Claude Sonnet  │              │   Gemma 4       │
-                          │  (Anthropic API)│              │   (Ollama)      │
-                          │  Remote/Primary │              │  Local/Fallback │
-                          └─────────────────┘              └─────────────────┘
+┌───────────────┐     LoRa 868 MHz     ┌─────────────────────┐
+│  MeshCore Node│ ◄──────────────────► │  WIO Pro P1 Tracker │
+│ (Handheld/App)│    MeshCore Protocol │ (USB Gateway Radio) │
+└───────────────┘                      └─────────┬───────────┘
+                                                 │
+                                    USB Serial │ 115200 Baud
+                                                 │
+                                  ┌──────────────┴──────────────┐
+                                  │      Server (Debian Linux)  │
+                                  │                             │
+                                  │  meshcore_client.py         │
+                                  │  meshcore_service.py        │
+                                  │  ai_backend.py              │
+                                  │  iot_handler.py             │
+                                  └──────┬──────────┬───────────┘
+                                         │          │
+                                    ▼          ▼
+                          ┌───────────────┐  ┌─────────────────┐
+                          │ Claude Sonnet │  │    Gemma 4      │
+                          │(Anthropic API)│  │   (Ollama)      │
+                          │ Remote/Primary│  │ Local/Fallback  │
+                          └───────────────┘  └─────────────────┘
+```
+
+### OpenClaw Edition *(planned)*
+
+```
+┌───────────────┐                    ┌────────────────────┐
+│  LoRa Mesh    │                    │  Chat Apps         │
+│  (MeshCore)   │                    │  (WhatsApp, TG...) │
+└───────┬───────┘                    └────────┬───────────┘
+        │                                     │
+        ▼                                     ▼
+┌───────────────────────────────────────────────────────────┐
+│                    OpenClaw Gateway                       │
+│                                                           │
+│  MeshCore Channel Plugin  │  Chat Plugins  │  AI Router  │
+│  Memory Manager           │  Context Engine              │
+└──────────────┬────────────────────────┬───────────────────┘
+               │                        │
+          ▼                        ▼
+   ┌───────────────┐       ┌─────────────────┐
+   │ Claude Sonnet │       │    Gemma 4      │
+   │   (Primary)   │       │  (Fallback)     │
+   └───────────────┘       └─────────────────┘
 ```
 
 ## Hardware
@@ -61,10 +93,6 @@ cd openclaw-meshcore
 chmod +x setup.sh
 ./setup.sh
 
-# Configure
-cp config.yaml config.local.yaml
-# Edit config.local.yaml with your settings
-
 # Set your Anthropic API key (optional, for remote AI)
 export ANTHROPIC_API_KEY="sk-ant-..."
 
@@ -79,7 +107,7 @@ Edit `config.yaml` to customize:
 
 ```yaml
 meshcore:
-  port: "auto"          # Serial port or "auto" for auto-detection
+  port: "auto"         # Serial port or "auto" for auto-detection
   baud: 115200
 
 ai:
@@ -96,7 +124,7 @@ iot:
 
 access:
   dm_policy: "open"     # "open" or "allowlist"
-  require_prefix: ""    # e.g. "\!ai " to only respond to prefixed messages
+  require_prefix: ""    # e.g. "!ai " to only respond to prefixed messages
 
 privacy:
   store_messages: false
@@ -105,65 +133,57 @@ privacy:
   context_timeout_minutes: 10
 ```
 
+## Dual AI — Why Two Models?
+
+| | Claude Sonnet (Primary) | Gemma 4 (Fallback) |
+|---|---|---|
+| **Location** | Remote (Anthropic API) | Local (Ollama) |
+| **Internet** | Required | Not needed |
+| **Knowledge** | Full reasoning, large context | Limited by storage & CPU |
+| **Use case** | Complex queries, analysis | Basic Q&A, offline mode |
+| **Trigger** | Default | Auto-failover when API unreachable |
+
+> **Note:** Gemma 4 runs with limited knowledge scope due to server storage and CPU constraints — ideal for basic queries and predefined topics. The failover is fully automatic and depends only on the API key availability. No cron jobs or complex setup required.
+
 ## Mesh Commands
 
 | Command | Description |
 |---------|-------------|
-| `\!ping` | Check if gateway is alive |
-| `\!status` | Show AI backend status (remote/local) |
-| `\!help` | List available commands |
-| `\!local <question>` | Force local AI (Gemma 4) |
-| `\!remote <question>` | Force remote AI (Claude Sonnet) |
+| `!ai <text>` | Query the AI (if prefix is configured) |
+| `!status` | Show system status |
+| `!ping` | Test connectivity |
 
-## Use Cases
+## Test Environment
 
-- **Emergency Services (THW/Feuerwehr)** — Hazmat identification by UN number, first aid protocols, technical references — all without mobile coverage.
-- **Disaster Response** — AI-assisted coordination when cell towers are down.
-- **Amateur Radio (DARC)** — Demonstration of AI integration in off-grid communication networks.
-- **Environmental Monitoring** — Sensor telemetry (GPS, temperature, air quality) fed into AI context.
-- **IoT Control** — Voice-like natural language commands to control relays, lights, pumps over mesh radio.
+| Component | Details |
+|-----------|---------|
+| Server | Hermes — Debian Linux, 192.168.178.73 |
+| Gateway | WIO Pro P1 Tracker via USB (/dev/ttyACM0) |
+| AI Primary | Claude Sonnet via Anthropic API (requires ANTHROPIC_API_KEY) |
+| AI Fallback | Gemma 4 (gemma3:4b) via Ollama on localhost:11434 |
+| LoRa Band | 868 MHz (EU) |
+| Python | 3.13+ with asyncio |
+| Packages | meshcore, httpx, pyyaml |
 
-## Project Structure
+## Roadmap
 
-```
-openclaw-meshcore/
-├── openclaw_meshcore.py   # Main application — ties everything together
-├── meshcore_client.py     # Async MeshCore serial client, message chunking
-├── ai_backend.py          # Dual AI backend (Anthropic + Ollama) with failover
-├── iot_handler.py         # GPIO/IoT action parser and executor
-├── config.yaml            # Default configuration
-├── requirements.txt       # Python dependencies
-├── setup.sh               # Automated setup script
-└── __init__.py
-```
-
-## Dependencies
-
-- Python 3.10+
-- [meshcore](https://pypi.org/project/meshcore/) — MeshCore Python SDK
-- [httpx](https://www.python-httpx.org/) — Async HTTP client
-- [PyYAML](https://pyyaml.org/) — Configuration parsing
-- Optional: RPi.GPIO or lgpio for hardware GPIO control
-
-## Privacy & Security
-
-- **No disk storage** — Messages and mesh data are never written to disk.
-- **Log redaction** — Message content is suppressed in logs by default (`redact_logs: true`).
-- **RAM-only context** — Conversation history lives in memory only, auto-purged after configurable timeout.
-- **No telemetry** — The gateway does not phone home or collect analytics.
-
-## Inspired By
-
-- [MeshClaw](https://github.com/Seeed-Solution/MeshClaw) — AI integration for Meshtastic (TypeScript). OpenClaw MeshCore adapts this concept for the MeshCore protocol using Python.
+- [x] Standalone Python integration
+- [x] Dual AI failover (Claude + Gemma)
+- [x] Channel message support
+- [x] IoT/GPIO command parsing
+- [ ] OpenClaw channel plugin integration
+- [ ] Multi-channel bridging (LoRa ↔ WhatsApp/Telegram)
+- [ ] Web dashboard
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE)
 
-## Contributing
+## Author
 
-Contributions welcome\! Open an issue or submit a pull request.
+**Jonathan Salim** — Buergerfunkinitiative Essen-Kettwig
+- GitHub: [gunpowder100](https://github.com/gunpowder100)
+- Web: [jonathansalim.de](https://jonathansalim.de)
+- Email: jonthan.salim@gmail.com
 
----
-
-*Built by the MeshCore Community — 73\!*
+Copyright © 2026 Jonathan Salim. All rights reserved.
