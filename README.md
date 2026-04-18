@@ -1,5 +1,23 @@
 # MeshCore KI Integration
 
+## ⚠️ Reliability warning: OpenClaw vs. Python-only MeshCore
+
+**Do not use OpenClaw if you require reliability.**
+
+OpenClaw is the most powerful add-on for MeshCore — **when you are physically sitting at the machine**. Nothing else adds as much capability.
+
+**But:** If you need stability — especially for emergency services, remote operation, or unattended deployments — **use the Python-only version of MeshCore.**
+
+The Python-only version relies entirely on proven, battle-tested architecture.
+
+### Quick decision guide
+
+| You are... | Use this |
+|------------|----------|
+| At the machine, want max features | OpenClaw ✅ |
+| Emergency services / need stability | Python-only MeshCore ✅ |
+
+**For critical infrastructure: choose Python-only.**
 **AI-powered LoRa mesh gateway** — bridges [MeshCore](https://github.com/rpsreal/MeshCore) mesh networks with AI models for off-grid intelligent communication.
 
 Send a text message from any MeshCore LoRa node → the gateway processes it through AI → you get an answer back over radio. No internet needed at the endpoint.
